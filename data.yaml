@@ -1,0 +1,13 @@
+path: Dataset/YOLO
+
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: glass
+  1: paper
+  2: cardboard
+  3: plastic
+  4: metal
+  5: trash
