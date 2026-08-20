@@ -64,11 +64,6 @@ client = InferenceHTTPClient(
 # ============================================================
 
 def run_inference(image):
-    """
-    Menjalankan Roboflow Workflow
-    dan mengubah hasilnya menjadi list predictions.
-    """
-
     result = client.run_workflow(
         workspace_name=WORKSPACE_NAME,
         workflow_id=WORKFLOW_ID,
@@ -77,18 +72,38 @@ def run_inference(image):
         }
     )
 
-    print("========== WORKFLOW RESULT ==========")
+    print("WORKFLOW RESULT:")
     print(result)
-    print("=====================================")
 
-    predictions = extract_predictions(result)
+    # Roboflow workflow mengembalikan list
+    if isinstance(result, list):
+        if len(result) == 0:
+            return []
+        result = result[0]
 
-    print("========== EXTRACTED PREDICTIONS ==========")
-    print(predictions)
-    print("============================================")
+    # Ambil outputs
+    if not isinstance(result, dict):
+        return []
 
-    return predictions
+    outputs = result.get("outputs", {})
 
+    if not isinstance(outputs, dict):
+        return []
+
+    predictions = outputs.get("predictions", {})
+
+    # Struktur yang biasanya keluar dari workflow
+    if isinstance(predictions, dict):
+
+        predictions = predictions.get(
+            "predictions",
+            []
+        )
+
+    if isinstance(predictions, list):
+        return predictions
+
+    return []
 
 # ============================================================
 # EXTRACT PREDICTIONS
@@ -268,11 +283,13 @@ def draw_predictions(image, predictions):
 
     annotated = image.copy()
 
+    if not isinstance(predictions, list):
+        return annotated
+
     for prediction in predictions:
 
-        # ----------------------------------------------------
-        # Ambil koordinat
-        # ----------------------------------------------------
+        if not isinstance(prediction, dict):
+            continue
 
         x = float(
             prediction.get("x", 0)
@@ -301,11 +318,6 @@ def draw_predictions(image, predictions):
             )
         )
 
-        # ----------------------------------------------------
-        # Convert center coordinates
-        # ke bounding box
-        # ----------------------------------------------------
-
         x1 = int(
             x - width / 2
         )
@@ -322,36 +334,6 @@ def draw_predictions(image, predictions):
             y + height / 2
         )
 
-        # ----------------------------------------------------
-        # Pastikan tidak keluar gambar
-        # ----------------------------------------------------
-
-        h, w = annotated.shape[:2]
-
-        x1 = max(
-            0,
-            min(x1, w - 1)
-        )
-
-        y1 = max(
-            0,
-            min(y1, h - 1)
-        )
-
-        x2 = max(
-            0,
-            min(x2, w - 1)
-        )
-
-        y2 = max(
-            0,
-            min(y2, h - 1)
-        )
-
-        # ----------------------------------------------------
-        # Bounding Box
-        # ----------------------------------------------------
-
         cv2.rectangle(
             annotated,
             (x1, y1),
@@ -360,24 +342,18 @@ def draw_predictions(image, predictions):
             3
         )
 
-        # ----------------------------------------------------
-        # Label
-        # ----------------------------------------------------
-
         text = (
             f"{label} "
             f"{confidence * 100:.1f}%"
         )
 
-        text_y = max(
-            y1 - 10,
-            25
-        )
-
         cv2.putText(
             annotated,
             text,
-            (x1, text_y),
+            (
+                x1,
+                max(y1 - 10, 20)
+            ),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.8,
             (0, 255, 0),
@@ -386,7 +362,12 @@ def draw_predictions(image, predictions):
         )
 
     return annotated
+        # ----------------------------------------------------
+        # Convert center coordinates
+        # ke bounding box
+        # ----------------------------------------------------
 
+        
 
 # ============================================================
 # DETECTION INFORMATION
@@ -394,7 +375,10 @@ def draw_predictions(image, predictions):
 
 def show_detection_metrics(predictions):
 
-    if not predictions:
+    if not isinstance(predictions, list):
+        predictions = []
+
+    if len(predictions) == 0:
 
         col1, col2, col3, col4 = st.columns(4)
 
@@ -419,6 +403,57 @@ def show_detection_metrics(predictions):
         )
 
         return
+
+    best = max(
+        predictions,
+        key=lambda p: float(
+            p.get("confidence", 0)
+        )
+        if isinstance(p, dict)
+        else 0
+    )
+
+    label = best.get(
+        "class",
+        "Unknown"
+    )
+
+    confidence = float(
+        best.get(
+            "confidence",
+            0
+        )
+    )
+
+    category, recommendation = get_category(
+        label
+    )
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Detected Object",
+        str(label).upper()
+    )
+
+    col2.metric(
+        "Confidence",
+        f"{confidence * 100:.1f}%"
+    )
+
+    col3.metric(
+        "Category",
+        category
+    )
+
+    col4.metric(
+        "Objects",
+        str(len(predictions))
+    )
+
+    st.info(
+        f"♻️ Rekomendasi: {recommendation}"
+    )
 
 
     # --------------------------------------------------------
@@ -626,26 +661,18 @@ if menu == "🏠 Home":
 
 elif menu == "📷 Live Detection":
 
-    st.title(
-        "📷 Live Detection"
-    )
+    st.title("📷 Live Detection")
 
     st.write(
         "Gunakan kamera perangkat untuk mengambil "
         "gambar dan mendeteksi jenis sampah."
     )
 
-
     camera_image = st.camera_input(
         "📸 Ambil gambar menggunakan kamera"
     )
 
-
     if camera_image is not None:
-
-        # ----------------------------------------------------
-        # Baca kamera
-        # ----------------------------------------------------
 
         file_bytes = np.asarray(
             bytearray(
@@ -654,12 +681,10 @@ elif menu == "📷 Live Detection":
             dtype=np.uint8
         )
 
-
         image = cv2.imdecode(
             file_bytes,
             cv2.IMREAD_COLOR
         )
-
 
         if image is None:
 
@@ -669,33 +694,32 @@ elif menu == "📷 Live Detection":
 
         else:
 
-            # ------------------------------------------------
-            # Inference
-            # ------------------------------------------------
+            with st.spinner(
+                "🔍 Mendeteksi objek..."
+            ):
 
-            predictions = process_image(
-                image
-            )
+                try:
+                    predictions = run_inference(
+                        image
+                    )
 
+                except Exception as e:
 
-            # ------------------------------------------------
-            # Detection
-            # ------------------------------------------------
+                    st.error(
+                        f"❌ Roboflow inference gagal: {e}"
+                    )
 
+                    predictions = []
+
+            # SATU GAMBAR HASIL
             annotated_image = draw_predictions(
                 image,
                 predictions
             )
 
-
-            # ------------------------------------------------
-            # SATU GAMBAR SAJA
-            # ------------------------------------------------
-
             st.subheader(
                 "🔍 Detection Result"
             )
-
 
             st.image(
                 cv2.cvtColor(
@@ -705,20 +729,13 @@ elif menu == "📷 Live Detection":
                 width="stretch"
             )
 
-
-            # ------------------------------------------------
-            # Information
-            # ------------------------------------------------
-
             st.subheader(
                 "🔍 Detection Information"
             )
 
-
             show_detection_metrics(
                 predictions
             )
-
 
 # ============================================================
 # IMAGE DETECTION
@@ -726,10 +743,7 @@ elif menu == "📷 Live Detection":
 
 elif menu == "🖼️ Image Detection":
 
-    st.title(
-        "🖼️ Image Detection"
-    )
-
+    st.title("🖼️ Image Detection")
 
     uploaded_file = st.file_uploader(
         "Upload gambar sampah",
@@ -740,12 +754,7 @@ elif menu == "🖼️ Image Detection":
         ]
     )
 
-
     if uploaded_file is not None:
-
-        # ----------------------------------------------------
-        # Baca file
-        # ----------------------------------------------------
 
         file_bytes = np.asarray(
             bytearray(
@@ -754,12 +763,10 @@ elif menu == "🖼️ Image Detection":
             dtype=np.uint8
         )
 
-
         image = cv2.imdecode(
             file_bytes,
             cv2.IMREAD_COLOR
         )
-
 
         if image is None:
 
@@ -769,33 +776,31 @@ elif menu == "🖼️ Image Detection":
 
         else:
 
-            # ------------------------------------------------
-            # Inference
-            # ------------------------------------------------
+            with st.spinner(
+                "🔍 Mendeteksi objek..."
+            ):
 
-            predictions = process_image(
-                image
-            )
+                try:
+                    predictions = run_inference(
+                        image
+                    )
 
+                except Exception as e:
 
-            # ------------------------------------------------
-            # Draw
-            # ------------------------------------------------
+                    st.error(
+                        f"❌ Roboflow inference gagal: {e}"
+                    )
+
+                    predictions = []
 
             annotated_image = draw_predictions(
                 image,
                 predictions
             )
 
-
-            # ------------------------------------------------
-            # Hasil langsung di gambar yang sama
-            # ------------------------------------------------
-
             st.subheader(
                 "🔍 Detection Result"
             )
-
 
             st.image(
                 cv2.cvtColor(
@@ -805,20 +810,13 @@ elif menu == "🖼️ Image Detection":
                 width="stretch"
             )
 
-
-            # ------------------------------------------------
-            # Information
-            # ------------------------------------------------
-
             st.subheader(
                 "🔍 Detection Information"
             )
 
-
             show_detection_metrics(
                 predictions
             )
-
 
 # ============================================================
 # ABOUT
