@@ -26,6 +26,7 @@ load_dotenv()
 
 api_key = os.getenv("ROBOFLOW_API_KEY")
 
+# Streamlit Cloud Secrets
 if not api_key:
     try:
         api_key = st.secrets["ROBOFLOW_API_KEY"]
@@ -81,65 +82,114 @@ def run_inference(image):
 # EXTRACT PREDICTIONS
 # ============================================================
 
-def extract_predictions(result):
+def find_predictions(data):
     """
-    Mengambil list predictions dari berbagai kemungkinan
-    struktur response Roboflow Workflow.
+    Mencari predictions dari response Roboflow Workflow.
+
+    Fungsi ini sengaja dibuat recursive supaya aman terhadap
+    response seperti:
+
+    {
+        "outputs": [
+            {
+                "predictions": {
+                    "predictions": [...]
+                }
+            }
+        ]
+    }
+
+    atau bentuk nested lainnya.
     """
 
-    if result is None:
+    # --------------------------------------------------------
+    # LIST
+    # --------------------------------------------------------
+
+    if isinstance(data, list):
+
+        # Cek apakah list ini langsung berisi predictions
+        for item in data:
+
+            if isinstance(item, dict):
+
+                if (
+                    "class" in item
+                    and (
+                        "confidence" in item
+                        or "score" in item
+                    )
+                ):
+                    return data
+
+        # Kalau belum ketemu, cari lebih dalam
+        for item in data:
+
+            result = find_predictions(item)
+
+            if result:
+                return result
+
         return []
 
+
     # --------------------------------------------------------
-    # Kalau langsung list
+    # DICT
     # --------------------------------------------------------
 
-    if isinstance(result, list):
+    if isinstance(data, dict):
 
-        # Kalau isinya langsung prediction
-        if all(isinstance(x, dict) for x in result):
-            return result
+        # Kalau dictionary ini sendiri adalah prediction
+        if (
+            "class" in data
+            and (
+                "confidence" in data
+                or "score" in data
+            )
+        ):
+
+            return [data]
+
+
+        # Cari predictions dulu
+        if "predictions" in data:
+
+            result = find_predictions(
+                data["predictions"]
+            )
+
+            if result:
+                return result
+
+
+        # Cari outputs
+        if "outputs" in data:
+
+            result = find_predictions(
+                data["outputs"]
+            )
+
+            if result:
+                return result
+
+
+        # Cari seluruh value dictionary
+        for value in data.values():
+
+            if isinstance(
+                value,
+                (dict, list)
+            ):
+
+                result = find_predictions(
+                    value
+                )
+
+                if result:
+                    return result
 
         return []
 
-    # --------------------------------------------------------
-    # Kalau dictionary
-    # --------------------------------------------------------
-
-    if isinstance(result, dict):
-
-        # Format:
-        # {"predictions": [...]}
-
-        predictions = result.get("predictions")
-
-        if isinstance(predictions, list):
-            return predictions
-
-        # Format:
-        # {"outputs": [...]}
-
-        outputs = result.get("outputs")
-
-        if isinstance(outputs, list):
-
-            for output in outputs:
-
-                if not isinstance(output, dict):
-                    continue
-
-                predictions = output.get("predictions")
-
-                if isinstance(predictions, list):
-                    return predictions
-
-                # Kadang predictions masih berupa dict
-                if isinstance(predictions, dict):
-
-                    nested = predictions.get("predictions")
-
-                    if isinstance(nested, list):
-                        return nested
 
     return []
 
@@ -153,6 +203,7 @@ def get_category(label):
     label = str(label).lower().strip()
 
     if label == "battery":
+
         return (
             "B3",
             "Buang ke tempat khusus B3"
@@ -165,6 +216,7 @@ def get_category(label):
         "metal",
         "glass"
     ]:
+
         return (
             "ANORGANIK",
             "Buang ke tempat sampah ANORGANIK"
@@ -176,18 +228,21 @@ def get_category(label):
         "food-waste",
         "organic-waste"
     ]:
+
         return (
             "ORGANIK",
             "Buang ke tempat sampah ORGANIK"
         )
 
     elif label == "trash":
+
         return (
             "GENERAL WASTE",
             "Buang ke tempat sampah umum"
         )
 
     else:
+
         return (
             "UNKNOWN",
             "Belum dikenali"
@@ -207,35 +262,77 @@ def draw_predictions(image, predictions):
 
     for prediction in predictions:
 
-        if not isinstance(prediction, dict):
+        if not isinstance(
+            prediction,
+            dict
+        ):
             continue
+
+
+        # ----------------------------------------------------
+        # LABEL
+        # ----------------------------------------------------
 
         label = prediction.get(
             "class",
-            prediction.get("label", "unknown")
+            prediction.get(
+                "label",
+                "unknown"
+            )
         )
+
+
+        # ----------------------------------------------------
+        # CONFIDENCE
+        # ----------------------------------------------------
 
         confidence = prediction.get(
             "confidence",
-            prediction.get("score", 0)
+            prediction.get(
+                "score",
+                0
+            )
         )
 
         try:
-            confidence = float(confidence)
+
+            confidence = float(
+                confidence
+            )
+
         except Exception:
+
             confidence = 0.0
 
+
         # ----------------------------------------------------
-        # YOLO / Roboflow format
+        # BOUNDING BOX
         # ----------------------------------------------------
 
         x = prediction.get("x")
         y = prediction.get("y")
-        width = prediction.get("width")
-        height = prediction.get("height")
 
-        if None in [x, y, width, height]:
+        width = prediction.get(
+            "width"
+        )
+
+        height = prediction.get(
+            "height"
+        )
+
+
+        if any(
+            value is None
+            for value in [
+                x,
+                y,
+                width,
+                height
+            ]
+        ):
+
             continue
+
 
         try:
 
@@ -245,27 +342,58 @@ def draw_predictions(image, predictions):
             height = float(height)
 
         except Exception:
+
             continue
 
-        # ----------------------------------------------------
-        # Convert center coordinates → corner coordinates
-        # ----------------------------------------------------
-
-        x1 = int(x - width / 2)
-        y1 = int(y - height / 2)
-
-        x2 = int(x + width / 2)
-        y2 = int(y + height / 2)
-
-        # Keep inside image
-        x1 = max(0, x1)
-        y1 = max(0, y1)
-
-        x2 = min(image.shape[1] - 1, x2)
-        y2 = min(image.shape[0] - 1, y2)
 
         # ----------------------------------------------------
-        # Bounding box
+        # CENTER → CORNER
+        # ----------------------------------------------------
+
+        x1 = int(
+            x - width / 2
+        )
+
+        y1 = int(
+            y - height / 2
+        )
+
+        x2 = int(
+            x + width / 2
+        )
+
+        y2 = int(
+            y + height / 2
+        )
+
+
+        # ----------------------------------------------------
+        # KEEP INSIDE IMAGE
+        # ----------------------------------------------------
+
+        x1 = max(
+            0,
+            x1
+        )
+
+        y1 = max(
+            0,
+            y1
+        )
+
+        x2 = min(
+            image.shape[1] - 1,
+            x2
+        )
+
+        y2 = min(
+            image.shape[0] - 1,
+            y2
+        )
+
+
+        # ----------------------------------------------------
+        # BOUNDING BOX
         # ----------------------------------------------------
 
         cv2.rectangle(
@@ -276,23 +404,34 @@ def draw_predictions(image, predictions):
             3
         )
 
+
         # ----------------------------------------------------
-        # Label
+        # LABEL TEXT
         # ----------------------------------------------------
 
-        text = f"{str(label).upper()} {confidence * 100:.1f}%"
+        text = (
+            f"{str(label).upper()} "
+            f"{confidence * 100:.1f}%"
+        )
+
 
         font = cv2.FONT_HERSHEY_SIMPLEX
 
         font_scale = 0.8
+
         thickness = 2
 
-        (text_width, text_height), baseline = cv2.getTextSize(
+
+        (
+            text_width,
+            text_height
+        ), baseline = cv2.getTextSize(
             text,
             font,
             font_scale,
             thickness
         )
+
 
         label_y1 = max(
             0,
@@ -306,7 +445,11 @@ def draw_predictions(image, predictions):
             x1 + text_width + 12
         )
 
-        # Background label
+
+        # ----------------------------------------------------
+        # LABEL BACKGROUND
+        # ----------------------------------------------------
+
         cv2.rectangle(
             annotated,
             (x1, label_y1),
@@ -315,17 +458,25 @@ def draw_predictions(image, predictions):
             -1
         )
 
-        # Text
+
+        # ----------------------------------------------------
+        # LABEL TEXT
+        # ----------------------------------------------------
+
         cv2.putText(
             annotated,
             text,
-            (x1 + 6, y1 - 8),
+            (
+                x1 + 6,
+                y1 - 8
+            ),
             font,
             font_scale,
             (0, 0, 0),
             thickness,
             cv2.LINE_AA
         )
+
 
     return annotated
 
@@ -334,31 +485,37 @@ def draw_predictions(image, predictions):
 # DETECTION INFORMATION
 # ============================================================
 
-def show_detection_metrics(predictions):
+def show_detection_metrics(
+    predictions
+):
 
     if not predictions:
 
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
+
             st.metric(
                 "Detected Object",
                 "No Object"
             )
 
         with col2:
+
             st.metric(
                 "Confidence",
                 "0.0%"
             )
 
         with col3:
+
             st.metric(
                 "Category",
                 "-"
             )
 
         with col4:
+
             st.metric(
                 "Objects",
                 "0"
@@ -370,34 +527,52 @@ def show_detection_metrics(predictions):
 
         return
 
+
     # --------------------------------------------------------
-    # Bersihkan prediction yang valid
+    # VALID PREDICTIONS
     # --------------------------------------------------------
 
     valid_predictions = []
 
     for prediction in predictions:
 
-        if not isinstance(prediction, dict):
+        if not isinstance(
+            prediction,
+            dict
+        ):
             continue
+
 
         label = prediction.get(
             "class",
-            prediction.get("label")
+            prediction.get(
+                "label"
+            )
         )
 
         confidence = prediction.get(
             "confidence",
-            prediction.get("score", 0)
+            prediction.get(
+                "score",
+                0
+            )
         )
+
 
         if label is None:
             continue
 
+
         try:
-            confidence = float(confidence)
+
+            confidence = float(
+                confidence
+            )
+
         except Exception:
+
             confidence = 0.0
+
 
         valid_predictions.append(
             {
@@ -405,6 +580,7 @@ def show_detection_metrics(predictions):
                 "confidence": confidence
             }
         )
+
 
     if not valid_predictions:
 
@@ -414,52 +590,73 @@ def show_detection_metrics(predictions):
 
         return
 
+
     # --------------------------------------------------------
-    # Ambil object dengan confidence tertinggi
+    # BEST DETECTION
     # --------------------------------------------------------
 
     best_prediction = max(
         valid_predictions,
-        key=lambda x: x["confidence"]
+        key=lambda item:
+        item["confidence"]
     )
 
-    label = best_prediction["label"]
-    confidence = best_prediction["confidence"]
 
-    category, recommendation = get_category(label)
+    label = best_prediction[
+        "label"
+    ]
+
+    confidence = best_prediction[
+        "confidence"
+    ]
+
+
+    category, recommendation = (
+        get_category(label)
+    )
+
 
     # --------------------------------------------------------
-    # Metrics
+    # METRICS
     # --------------------------------------------------------
 
     col1, col2, col3, col4 = st.columns(4)
 
+
     with col1:
+
         st.metric(
             "Detected Object",
             label.upper()
         )
 
+
     with col2:
+
         st.metric(
             "Confidence",
             f"{confidence * 100:.1f}%"
         )
 
+
     with col3:
+
         st.metric(
             "Category",
             category
         )
 
+
     with col4:
+
         st.metric(
             "Objects",
             len(valid_predictions)
         )
 
+
     # --------------------------------------------------------
-    # Recommendation
+    # RECOMMENDATION
     # --------------------------------------------------------
 
     st.info(
@@ -471,7 +668,9 @@ def show_detection_metrics(predictions):
 # SIDEBAR
 # ============================================================
 
-st.sidebar.title("♻️ EcoVision AI")
+st.sidebar.title(
+    "♻️ EcoVision AI"
+)
 
 st.sidebar.markdown(
     "### Navigation"
@@ -494,7 +693,9 @@ menu = st.sidebar.radio(
 
 if menu == "🏠 Home":
 
-    st.title("♻️ EcoVision AI")
+    st.title(
+        "♻️ EcoVision AI"
+    )
 
     st.subheader(
         "AI-Powered Waste Detection"
@@ -502,9 +703,9 @@ if menu == "🏠 Home":
 
     st.write(
         """
-        EcoVision AI adalah aplikasi untuk mendeteksi
-        jenis sampah menggunakan Computer Vision dan
-        Artificial Intelligence.
+        EcoVision AI adalah aplikasi Computer Vision
+        untuk mendeteksi jenis sampah secara otomatis
+        menggunakan AI.
         """
     )
 
@@ -513,14 +714,14 @@ if menu == "🏠 Home":
         ### Fitur
 
         📷 **Live Detection**  
-        Gunakan kamera untuk mengambil gambar sampah.
+        Gunakan kamera untuk mendeteksi sampah.
 
         🖼️ **Image Detection**  
-        Upload gambar sampah dari perangkat.
+        Upload gambar sampah.
 
         ♻️ **Smart Classification**  
-        Sistem menentukan kategori sampah dan memberikan
-        rekomendasi pembuangan.
+        Sistem menentukan kategori sampah dan
+        memberikan rekomendasi pembuangan.
         """
     )
 
@@ -531,32 +732,70 @@ if menu == "🏠 Home":
 
 elif menu == "📷 Live Detection":
 
-    st.title("📷 Live Detection")
+    st.title(
+        "📷 Live Detection"
+    )
 
     st.write(
-        "Gunakan kamera perangkat untuk mengambil gambar "
-        "dan mendeteksi jenis sampah."
+        "Gunakan kamera perangkat untuk mengambil "
+        "gambar dan mendeteksi jenis sampah."
     )
+
+
+    # --------------------------------------------------------
+    # HIDE CAMERA AFTER CAPTURE
+    # --------------------------------------------------------
 
     camera_image = st.camera_input(
         "Ambil gambar menggunakan kamera"
     )
 
+
     if camera_image is not None:
 
-        # ====================================================
+        # Hide captured camera widget so that only
+        # the annotated result remains visible.
+
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stCameraInput"] {
+                display: none;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+        # ----------------------------------------------------
+        # RETAKE BUTTON
+        # ----------------------------------------------------
+
+        if st.button(
+            "📷 Ambil Foto Baru"
+        ):
+
+            st.rerun()
+
+
+        # ----------------------------------------------------
         # READ IMAGE
-        # ====================================================
+        # ----------------------------------------------------
 
         file_bytes = np.asarray(
-            bytearray(camera_image.getvalue()),
+            bytearray(
+                camera_image.getvalue()
+            ),
             dtype=np.uint8
         )
+
 
         image = cv2.imdecode(
             file_bytes,
             cv2.IMREAD_COLOR
         )
+
 
         if image is None:
 
@@ -566,9 +805,9 @@ elif menu == "📷 Live Detection":
 
         else:
 
-            # =================================================
+            # ------------------------------------------------
             # INFERENCE
-            # =================================================
+            # ------------------------------------------------
 
             with st.spinner(
                 "🔍 Mendeteksi objek..."
@@ -580,8 +819,10 @@ elif menu == "📷 Live Detection":
                         image
                     )
 
-                    predictions = extract_predictions(
-                        result
+                    predictions = (
+                        find_predictions(
+                            result
+                        )
                     )
 
                 except Exception as e:
@@ -592,33 +833,25 @@ elif menu == "📷 Live Detection":
 
                     predictions = []
 
-            # =================================================
-            # ANNOTATED IMAGE
-            # =================================================
 
-            annotated_image = draw_predictions(
-                image,
-                predictions
+            # ------------------------------------------------
+            # ANNOTATE IMAGE
+            # ------------------------------------------------
+
+            annotated_image = (
+                draw_predictions(
+                    image,
+                    predictions
+                )
             )
 
-            # =================================================
-            # DETECTION INFORMATION
-            # =================================================
+
+            # ------------------------------------------------
+            # ONE IMAGE ONLY
+            # ------------------------------------------------
 
             st.subheader(
-                "🔍 Detection Information"
-            )
-
-            show_detection_metrics(
-                predictions
-            )
-
-            # =================================================
-            # ONE DETECTION IMAGE
-            # =================================================
-
-            st.subheader(
-                "Detection Result"
+                "🔍 Detection Result"
             )
 
             st.image(
@@ -630,13 +863,28 @@ elif menu == "📷 Live Detection":
             )
 
 
+            # ------------------------------------------------
+            # INFORMATION
+            # ------------------------------------------------
+
+            st.subheader(
+                "🔍 Detection Information"
+            )
+
+            show_detection_metrics(
+                predictions
+            )
+
+
 # ============================================================
 # IMAGE DETECTION
 # ============================================================
 
 elif menu == "🖼️ Image Detection":
 
-    st.title("🖼️ Image Detection")
+    st.title(
+        "🖼️ Image Detection"
+    )
 
     uploaded_file = st.file_uploader(
         "Upload gambar sampah",
@@ -647,21 +895,26 @@ elif menu == "🖼️ Image Detection":
         ]
     )
 
+
     if uploaded_file is not None:
 
-        # ====================================================
+        # ----------------------------------------------------
         # READ IMAGE
-        # ====================================================
+        # ----------------------------------------------------
 
         file_bytes = np.asarray(
-            bytearray(uploaded_file.read()),
+            bytearray(
+                uploaded_file.read()
+            ),
             dtype=np.uint8
         )
+
 
         image = cv2.imdecode(
             file_bytes,
             cv2.IMREAD_COLOR
         )
+
 
         if image is None:
 
@@ -671,9 +924,9 @@ elif menu == "🖼️ Image Detection":
 
         else:
 
-            # =================================================
+            # ------------------------------------------------
             # INFERENCE
-            # =================================================
+            # ------------------------------------------------
 
             with st.spinner(
                 "🔍 Mendeteksi objek..."
@@ -685,8 +938,10 @@ elif menu == "🖼️ Image Detection":
                         image
                     )
 
-                    predictions = extract_predictions(
-                        result
+                    predictions = (
+                        find_predictions(
+                            result
+                        )
                     )
 
                 except Exception as e:
@@ -697,29 +952,25 @@ elif menu == "🖼️ Image Detection":
 
                     predictions = []
 
-            # =================================================
+
+            # ------------------------------------------------
             # ANNOTATED IMAGE
-            # =================================================
+            # ------------------------------------------------
 
-            annotated_image = draw_predictions(
-                image,
-                predictions
+            annotated_image = (
+                draw_predictions(
+                    image,
+                    predictions
+                )
             )
 
-            # =================================================
+
+            # ------------------------------------------------
             # RESULT
-            # =================================================
+            # ------------------------------------------------
 
             st.subheader(
-                "🔍 Detection Information"
-            )
-
-            show_detection_metrics(
-                predictions
-            )
-
-            st.subheader(
-                "Detection Result"
+                "🔍 Detection Result"
             )
 
             st.image(
@@ -731,18 +982,34 @@ elif menu == "🖼️ Image Detection":
             )
 
 
+            # ------------------------------------------------
+            # INFORMATION
+            # ------------------------------------------------
+
+            st.subheader(
+                "🔍 Detection Information"
+            )
+
+            show_detection_metrics(
+                predictions
+            )
+
+
 # ============================================================
 # ABOUT
 # ============================================================
 
 elif menu == "ℹ️ About":
 
-    st.title("ℹ️ About EcoVision AI")
+    st.title(
+        "ℹ️ About EcoVision AI"
+    )
 
     st.write(
         """
-        EcoVision AI menggunakan Computer Vision untuk
-        membantu mengenali jenis sampah secara otomatis.
+        EcoVision AI menggunakan Computer Vision dan
+        Artificial Intelligence untuk membantu mengenali
+        jenis sampah secara otomatis.
         """
     )
 
