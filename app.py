@@ -664,8 +664,8 @@ elif menu == "📷 Live Detection":
     st.title("📷 Live Detection")
 
     st.write(
-        "Gunakan kamera perangkat untuk mengambil "
-        "gambar dan mendeteksi jenis sampah."
+        "Gunakan kamera perangkat untuk mengambil gambar "
+        "dan mendeteksi jenis sampah."
     )
 
     camera_image = st.camera_input(
@@ -675,9 +675,7 @@ elif menu == "📷 Live Detection":
     if camera_image is not None:
 
         file_bytes = np.asarray(
-            bytearray(
-                camera_image.getvalue()
-            ),
+            bytearray(camera_image.getvalue()),
             dtype=np.uint8
         )
 
@@ -699,9 +697,8 @@ elif menu == "📷 Live Detection":
             ):
 
                 try:
-                    predictions = run_inference(
-                        image
-                    )
+
+                    predictions = run_inference(image)
 
                 except Exception as e:
 
@@ -711,16 +708,13 @@ elif menu == "📷 Live Detection":
 
                     predictions = []
 
-            # SATU GAMBAR HASIL
+            # Gambar hasil deteksi langsung di gambar kamera
             annotated_image = draw_predictions(
                 image,
                 predictions
             )
 
-            st.subheader(
-                "🔍 Detection Result"
-            )
-
+            # SATU GAMBAR SAJA
             st.image(
                 cv2.cvtColor(
                     annotated_image,
@@ -729,6 +723,7 @@ elif menu == "📷 Live Detection":
                 width="stretch"
             )
 
+            # Informasi deteksi
             st.subheader(
                 "🔍 Detection Information"
             )
@@ -736,7 +731,6 @@ elif menu == "📷 Live Detection":
             show_detection_metrics(
                 predictions
             )
-
 # ============================================================
 # IMAGE DETECTION
 # ============================================================
