@@ -61,8 +61,7 @@ def run_inference(image):
         workflow_id="my-first-project-vmy-first-project-owy0e-4-yolo11s-t1-logic",
         images={
             "image": image
-        },
-        use_cache=True
+        }
     )
 
     print("WORKFLOW RESULT:")
