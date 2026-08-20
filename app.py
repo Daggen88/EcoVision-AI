@@ -117,10 +117,6 @@ WORKFLOW_ID = (
 # ============================================================
 
 def run_inference(image):
-    """
-    Menjalankan Roboflow Workflow
-    menggunakan gambar OpenCV.
-    """
 
     result = client.run_workflow(
         workspace_name=WORKSPACE_NAME,
@@ -129,6 +125,10 @@ def run_inference(image):
             "image": image
         }
     )
+
+    print("========== WORKFLOW RESULT ==========")
+    print(result)
+    print("=====================================")
 
     return result
 
@@ -139,14 +139,18 @@ def run_inference(image):
 
 def extract_predictions(result):
     """
-    Mengambil list predictions dari hasil
-    Roboflow Workflow.
-
-    Struktur hasil Roboflow bisa berbeda,
-    jadi fungsi ini dibuat fleksibel.
+    Mengambil predictions dari hasil Roboflow Workflow.
     """
 
-    if result is None:
+    try:
+        predictions = result["outputs"]["predictions"]
+
+        if isinstance(predictions, dict):
+            return predictions.get("predictions", [])
+
+        return []
+
+    except Exception:
         return []
 
 
