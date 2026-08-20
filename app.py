@@ -67,7 +67,9 @@ def run_inference(image):
     success, buffer = cv2.imencode(".jpg", image)
 
     if not success:
-        raise Exception("Gagal mengubah gambar menjadi JPG.")
+        raise Exception(
+            "Gagal mengubah gambar menjadi JPG."
+        )
 
     image_base64 = base64.b64encode(
         buffer.tobytes()
@@ -133,7 +135,6 @@ def run_inference(image):
     print("========== WORKFLOW RESULT ==========")
     print(result)
     print("=====================================")
-
 
     return result
 
@@ -323,8 +324,13 @@ def draw_predictions(image, predictions):
 
         try:
 
-            x = float(prediction.get("x", 0))
-            y = float(prediction.get("y", 0))
+            x = float(
+                prediction.get("x", 0)
+            )
+
+            y = float(
+                prediction.get("y", 0)
+            )
 
             width = float(
                 prediction.get("width", 0)
@@ -352,11 +358,21 @@ def draw_predictions(image, predictions):
             # -> top-left / bottom-right
             # ------------------------------------------------
 
-            x1 = int(x - width / 2)
-            y1 = int(y - height / 2)
+            x1 = int(
+                x - width / 2
+            )
 
-            x2 = int(x + width / 2)
-            y2 = int(y + height / 2)
+            y1 = int(
+                y - height / 2
+            )
+
+            x2 = int(
+                x + width / 2
+            )
+
+            y2 = int(
+                y + height / 2
+            )
 
 
             # ------------------------------------------------
@@ -365,11 +381,25 @@ def draw_predictions(image, predictions):
 
             h, w = result.shape[:2]
 
-            x1 = max(0, min(x1, w - 1))
-            y1 = max(0, min(y1, h - 1))
+            x1 = max(
+                0,
+                min(x1, w - 1)
+            )
 
-            x2 = max(0, min(x2, w - 1))
-            y2 = max(0, min(y2, h - 1))
+            y1 = max(
+                0,
+                min(y1, h - 1)
+            )
+
+            x2 = max(
+                0,
+                min(x2, w - 1)
+            )
+
+            y2 = max(
+                0,
+                min(y2, h - 1)
+            )
 
 
             # ------------------------------------------------
@@ -485,7 +515,10 @@ def show_detection_metrics(predictions):
     best = max(
         valid_predictions,
         key=lambda p: float(
-            p.get("confidence", 0)
+            p.get(
+                "confidence",
+                0
+            )
         )
     )
 
@@ -652,6 +685,10 @@ elif menu == "📷 Live Detection":
     )
 
 
+    # ========================================================
+    # CAMERA
+    # ========================================================
+
     camera_image = st.camera_input(
         "Ambil gambar menggunakan kamera"
     )
@@ -683,21 +720,8 @@ elif menu == "📷 Live Detection":
                 "❌ Gambar tidak dapat dibaca."
             )
 
+
         else:
-
-            st.subheader(
-                "Original Image"
-            )
-
-
-            st.image(
-                cv2.cvtColor(
-                    image,
-                    cv2.COLOR_BGR2RGB
-                ),
-                width="stretch"
-            )
-
 
             # ------------------------------------------------
             # Inference
@@ -729,7 +753,7 @@ elif menu == "📷 Live Detection":
 
 
             # ------------------------------------------------
-            # Information
+            # Detection Information
             # ------------------------------------------------
 
             st.subheader(
@@ -743,17 +767,12 @@ elif menu == "📷 Live Detection":
 
 
             # ------------------------------------------------
-            # Annotated image
+            # ONE DETECTION IMAGE
             # ------------------------------------------------
 
             annotated_image = draw_predictions(
                 image,
                 predictions
-            )
-
-
-            st.subheader(
-                "Detection Result"
             )
 
 
@@ -812,6 +831,7 @@ elif menu == "🖼️ Image Detection":
             st.error(
                 "❌ Gambar tidak dapat dibaca."
             )
+
 
         else:
 
