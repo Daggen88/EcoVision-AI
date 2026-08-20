@@ -74,100 +74,65 @@ def run_inference(image):
         }
     )
 
+    print("========== WORKFLOW RESULT ==========")
+    print(result)
+    print("=====================================")
+
     return result
 
 
-# ============================================================
-# EXTRACT PREDICTIONS
-# ============================================================
-
-def extract_predictions(data):
+def extract_predictions(result):
     """
-    Mengambil predictions dari hasil Roboflow Workflow.
-
-    Workflow Roboflow dapat mengembalikan struktur
-    dictionary/list yang berbeda tergantung output workflow.
-    Fungsi ini mencari object predictions secara aman.
+    Mengambil predictions dari output Roboflow Workflow.
     """
 
-    # Kalau dictionary
-    if isinstance(data, dict):
+    try:
 
-        # Kasus:
-        # {"predictions": [...]}
-        if "predictions" in data:
+        # ====================================================
+        # OUTPUT WORKFLOW
+        # ====================================================
 
-            predictions = data["predictions"]
+        outputs = result.get("outputs", [])
 
-            if isinstance(predictions, list):
-                return [
-                    p for p in predictions
-                    if isinstance(p, dict)
-                ]
+        if not outputs:
+            return []
 
-            # Kadang predictions berupa dictionary
-            if isinstance(predictions, dict):
+        # Workflow menghasilkan list outputs
+        first_output = outputs[0]
 
-                # {"predictions": {"predictions": [...]}}
-                if "predictions" in predictions:
+        if not isinstance(first_output, dict):
+            return []
 
-                    nested = predictions["predictions"]
+        # ====================================================
+        # AMBIL predictions
+        # ====================================================
 
-                    if isinstance(nested, list):
-                        return [
-                            p for p in nested
-                            if isinstance(p, dict)
-                        ]
+        prediction_data = first_output.get(
+            "predictions",
+            {}
+        )
 
-                # Kalau object prediction tunggal
-                if any(
-                    key in predictions
-                    for key in [
-                        "class",
-                        "confidence",
-                        "x",
-                        "y",
-                        "width",
-                        "height"
-                    ]
-                ):
-                    return [predictions]
+        if not isinstance(prediction_data, dict):
+            return []
 
-        # Cari secara recursive di seluruh dictionary
-        for value in data.values():
+        predictions = prediction_data.get(
+            "predictions",
+            []
+        )
 
-            found = extract_predictions(value)
+        if not isinstance(predictions, list):
+            return []
 
-            if found:
-                return found
+        return predictions
 
-    # Kalau list
-    elif isinstance(data, list):
+    except Exception as e:
 
-        # Cek apakah list ini langsung berisi prediction
-        direct_predictions = [
-            item for item in data
-            if isinstance(item, dict)
-            and (
-                "class" in item
-                or "confidence" in item
-            )
-        ]
+        print(
+            "ERROR EXTRACT PREDICTIONS:",
+            e
+        )
 
-        if direct_predictions:
-            return direct_predictions
-
-        # Recursive
-        for item in data:
-
-            found = extract_predictions(item)
-
-            if found:
-                return found
-
-    return []
-
-
+        return []
 # ============================================================
 # CATEGORY
 # ============================================================
