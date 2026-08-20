@@ -641,41 +641,32 @@ if menu == "🏠 Home":
 
 elif menu == "📷 Live Detection":
 
-    st.title(
-        "📷 Live Detection"
-    )
-
+    st.title("📷 Live Detection")
 
     st.write(
-        "Gunakan kamera perangkat untuk "
-        "mengambil gambar dan mendeteksi sampah."
+        "Gunakan kamera perangkat untuk mengambil gambar "
+        "dan mendeteksi jenis sampah."
     )
-
 
     camera_image = st.camera_input(
         "Ambil gambar menggunakan kamera"
     )
 
-
     if camera_image is not None:
 
-        # ----------------------------------------------------
-        # Read image
-        # ----------------------------------------------------
+        # ====================================================
+        # READ IMAGE
+        # ====================================================
 
         file_bytes = np.asarray(
-            bytearray(
-                camera_image.read()
-            ),
+            bytearray(camera_image.read()),
             dtype=np.uint8
         )
-
 
         image = cv2.imdecode(
             file_bytes,
             cv2.IMREAD_COLOR
         )
-
 
         if image is None:
 
@@ -685,23 +676,9 @@ elif menu == "📷 Live Detection":
 
         else:
 
-            st.subheader(
-                "Original Image"
-            )
-
-
-            st.image(
-                cv2.cvtColor(
-                    image,
-                    cv2.COLOR_BGR2RGB
-                ),
-                width="stretch"
-            )
-
-
-            # ------------------------------------------------
-            # Inference
-            # ------------------------------------------------
+            # =================================================
+            # INFERENCE
+            # =================================================
 
             with st.spinner(
                 "🔍 Mendeteksi objek..."
@@ -713,11 +690,9 @@ elif menu == "📷 Live Detection":
                         image
                     )
 
-
                     predictions = extract_predictions(
                         result
                     )
-
 
                 except Exception as e:
 
@@ -728,14 +703,40 @@ elif menu == "📷 Live Detection":
                     predictions = []
 
 
-            # ------------------------------------------------
-            # Information
-            # ------------------------------------------------
+            # =================================================
+            # DRAW DETECTION
+            # =================================================
 
-            st.subheader(
-                "🔍 Detection Information"
+            annotated_image = draw_predictions(
+                image,
+                predictions
             )
 
+
+            # =================================================
+            # SHOW RESULT
+            # =================================================
+
+            st.subheader(
+                "🔍 Detection Result"
+            )
+
+            st.image(
+                cv2.cvtColor(
+                    annotated_image,
+                    cv2.COLOR_BGR2RGB
+                ),
+                width="stretch"
+            )
+
+
+            # =================================================
+            # DETECTION INFORMATION
+            # =================================================
+
+            st.subheader(
+                "🔎 Detection Information"
+            )
 
             show_detection_metrics(
                 predictions
