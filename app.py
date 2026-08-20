@@ -56,20 +56,44 @@ MODEL_ID = "daggen580-gmail-com/my-first-project-owy0e-4-yolo11s-t1"
 # ============================================================
 
 def run_inference(image):
-    result = client.run_workflow(
-        workspace_name="daggen580-gmail-com",
-        workflow_id="my-first-project-vmy-first-project-owy0e-4-yolo11s-t1-logic",
-        images={
-            "image": image
-        }
+    import tempfile
+
+    # Simpan image ke file sementara
+    temp_file = tempfile.NamedTemporaryFile(
+        suffix=".jpg",
+        delete=False
     )
 
-    print("========== WORKFLOW RESULT ==========")
-    print(type(result))
-    print(result)
-    print("=====================================")
+    temp_path = temp_file.name
+    temp_file.close()
 
-    return result
+    cv2.imwrite(temp_path, image)
+
+    try:
+        result = client.run_workflow(
+            workspace_name="daggen580-gmail-com",
+            workflow_id="my-first-project-vmy-first-project-owy0e-4-yolo11s-t1-logic",
+            images={
+                "image": temp_path
+            }
+        )
+
+        print("========== WORKFLOW RESULT ==========")
+        print(type(result))
+        print(result)
+        print("=====================================")
+
+        # Workflow mengembalikan list
+        if isinstance(result, list):
+            if len(result) > 0:
+                return result[0]
+            return {}
+
+        return result
+
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
 
 
 def get_category(label):
