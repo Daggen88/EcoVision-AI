@@ -59,7 +59,8 @@ def run_inference(image):
     """
     Menjalankan inference menggunakan model Roboflow.
     """
-
+    print("MODEL_ID:", MODEL_ID)
+    print("API KEY TERBACA:", bool(api_key))
     result = client.infer(
         image,
         model_id=MODEL_ID
