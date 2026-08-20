@@ -56,17 +56,19 @@ MODEL_ID = "daggen580-gmail-com/my-first-project-owy0e-4-yolo11s-t1"
 # ============================================================
 
 def run_inference(image):
-    """
-    Menjalankan inference menggunakan model Roboflow.
-    """
-    print("MODEL_ID:", MODEL_ID)
-    print("API KEY TERBACA:", bool(api_key))
-    result = client.infer(
-        image,
-        model_id=MODEL_ID
+    result = client.run_workflow(
+        workspace_name="daggen580-gmail-com",
+        workflow_id="my-first-project-vmy-first-project-owy0e-4-yolo11s-t1-logic",
+        images={
+            "image": image
+        },
+        use_cache=True
     )
 
-    return result.get("predictions", [])
+    print("WORKFLOW RESULT:")
+    print(result)
+
+    return result
 
 
 def get_category(label):
