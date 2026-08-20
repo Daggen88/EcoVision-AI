@@ -64,33 +64,12 @@ def run_inference(image):
         }
     )
 
-    print("WORKFLOW RESULT:")
+    print("========== WORKFLOW RESULT ==========")
+    print(type(result))
     print(result)
+    print("=====================================")
 
-    # Workflow Roboflow mengembalikan list
-    if isinstance(result, list):
-        if len(result) > 0:
-            result = result[0]
-        else:
-            return []
-
-    # Kalau hasilnya dictionary
-    if isinstance(result, dict):
-        # Kalau langsung punya predictions
-        if "predictions" in result:
-            return result["predictions"]
-
-        # Cari predictions di dalam output workflow
-        for value in result.values():
-            if isinstance(value, dict) and "predictions" in value:
-                return value["predictions"]
-
-            if isinstance(value, list):
-                for item in value:
-                    if isinstance(item, dict) and "predictions" in item:
-                        return item["predictions"]
-
-    return []
+    return result
 
 
 def get_category(label):
